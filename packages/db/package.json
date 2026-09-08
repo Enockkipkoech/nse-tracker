@@ -1,0 +1,28 @@
+{
+  "name": "@nse/db",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "prisma generate",
+    "seed": "prisma db seed",
+    "seed:fundamentals": "tsx prisma/seed-fundamentals.ts",
+    "seed:corporate-actions": "tsx prisma/seed-corporate-actions.ts",
+    "migrate:dev": "prisma migrate dev",
+    "migrate:deploy": "prisma migrate deploy",
+    "studio": "prisma studio"
+  },
+  "dependencies": {
+    "@nse/lib": "workspace:*",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "6.19.3",
+    "dotenv": "^16.4.0"
+  },
+  "devDependencies": {
+    "prisma": "6.19.3",
+    "tsx": "^4.19.0"
+  },
+  "exports": {
+    ".": "./src/client.ts"
+  }
+}

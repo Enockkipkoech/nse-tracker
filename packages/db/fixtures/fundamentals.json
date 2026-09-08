@@ -1,0 +1,83 @@
+{
+  "_readme": [
+    "Hand-entered from published annual/interim reports. This is not scraped —",
+    "TradingView's scanner doesn't expose revenue/PAT/book-value detail at the",
+    "columns verified in src/lib/tradingview.ts, only EPS/PE at the latest-price",
+    "level, which already lands in daily_prices. Nothing here is inferred.",
+    "",
+    "reportUrl is required, not optional-in-practice: an unsourced fundamentals",
+    "row is a claim with no way to check it later. If you don't have the URL",
+    "yet, leave the row out rather than guess or leave it null.",
+    "",
+    "periodType: FY | HY | Q1 | Q3.",
+    "periodEnd: the reporting period's end date, not the announcement date.",
+    "",
+    "This is a TEMPLATE. SCOM's row below is real, verified data from the",
+    "FY2026 annual report. EQTY and KCB are still structurally-shaped",
+    "placeholders with null figures — replace with actual figures from each",
+    "company's investor-relations page before seeding those two."
+  ],
+  "fundamentals": [
+    {
+      "ticker": "SCOM",
+      "periodEnd": "2026-03-31",
+      "periodType": "FY",
+      "isAudited": true,
+      "revenueKes": 427559100000,
+      "patKes": 95608600000,
+      "epsBasicKes": 2.39,
+      "dpsDeclaredKes": 2.00,
+      "bookValuePerShareKes": 5.02,
+      "reportUrl": "https://www.safaricom.co.ke/images/Downloads/2026_Safaricom_Annual_Report_Updated.pdf",
+      "extra": {
+        "serviceRevenueKes": 414137400000,
+        "ebitdaKes": 220262000000,
+        "ebitKes": 146321900000,
+        "pAIbtKes": 126817900000,
+        "taxKes": 53141900000,
+        "patGroupKes": 73676000000,
+        "nciKes": -21932600000,
+        "totalAssetsKes": 518045400000,
+        "totalLiabilitiesKes": 287124300000,
+        "totalEquityKes": 230921100000,
+        "equityAttributableToParentKes": 201134800000,
+        "sharesOutstandingReported": 40065428000,
+        "interimDpsKes": 0.85,
+        "finalDpsKes": 1.15,
+        "totalDividendKes": 80130000000,
+        "marketCapKesAtPeriodEnd": 1100000000000,
+        "approvalDate": "2026-05-06",
+        "auditor": "Ernst & Young LLP",
+        "agmDate": "2026-07-31",
+        "_note": "marketCapKesAtPeriodEnd is as of 2026-03-31 (report date) — do not cross-check against daily_prices.marketCapKes, which reflects live capture dates months later. sharesOutstandingReported (40,065,428,000) vs security_master.sharesIssued (40,065,400,000): 28,000-share difference, immaterial, likely rounding between report and TradingView's count — not a discrepancy worth a quality_log entry."
+      },
+      "_status": "VERIFIED — Safaricom PLC Group (consolidated), audited, approved by Board 6 May 2026"
+    },
+    {
+      "ticker": "EQTY",
+      "periodEnd": "2025-12-31",
+      "periodType": "FY",
+      "isAudited": true,
+      "revenueKes": null,
+      "patKes": null,
+      "epsBasicKes": null,
+      "dpsDeclaredKes": null,
+      "bookValuePerShareKes": null,
+      "reportUrl": null,
+      "_status": "PLACEHOLDER — fill from Equity Group's FY2025 annual report before seeding"
+    },
+    {
+      "ticker": "KCB",
+      "periodEnd": "2025-12-31",
+      "periodType": "FY",
+      "isAudited": true,
+      "revenueKes": null,
+      "patKes": null,
+      "epsBasicKes": null,
+      "dpsDeclaredKes": null,
+      "bookValuePerShareKes": null,
+      "reportUrl": null,
+      "_status": "PLACEHOLDER — fill from KCB Group's FY2025 annual report before seeding"
+    }
+  ]
+}

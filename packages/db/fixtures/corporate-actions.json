@@ -1,0 +1,47 @@
+{
+  "_readme": [
+    "Dividend and other corporate-action events, hand-entered from NSE",
+    "announcements or annual reports. Same rule as fundamentals.json: a row",
+    "with real figures needs a reportUrl/sourceUrl, or the seed script",
+    "refuses it. Unknown dates are left null explicitly rather than guessed —",
+    "an incomplete row with honest nulls beats a complete-looking row with",
+    "invented ones.",
+    "",
+    "actionId is stable and NOT date-based, so a correction later doesn't",
+    "orphan the old row: {ticker}-{actionType}-{dividendType}-FY{fiscalYear}.",
+    "Two rows per typical FY dividend (INTERIM + FINAL) is normal, not a",
+    "duplicate."
+  ],
+  "actions": [
+    {
+      "actionId": "SCOM-CASH_DIVIDEND-FINAL-FY2026",
+      "ticker": "SCOM",
+      "actionType": "CASH_DIVIDEND",
+      "dividendType": "FINAL",
+      "fiscalYear": 2026,
+      "announcementDate": "2026-05-06",
+      "amountPerShareKes": 1.15,
+      "booksClosureDate": "2026-08-04",
+      "exDate": null,
+      "paymentDate": "2026-09-04",
+      "status": "PAID",
+      "sourceUrl": "https://www.nse.co.ke/wp-content/uploads/Safaricom-Plc-%E2%80%93Audited-Results-for-the-Year-Ended-31-March-2026.pdf",
+      "_note": "exDate not supplied — typically T-1 or T-2 from booksClosureDate on the NSE, but that offset was flagged in the original schema doc as something to confirm per-announcement, not compute. Left null rather than guessed. announcementDate uses the Board approval date (2026-05-06); AGM date (2026-07-31, when shareholders approved the payout) isn't a schema field — kept in fundamentals.json's extra blob for SCOM's FY2026 period instead."
+    },
+    {
+      "actionId": "SCOM-CASH_DIVIDEND-INTERIM-FY2026",
+      "ticker": "SCOM",
+      "actionType": "CASH_DIVIDEND",
+      "dividendType": "INTERIM",
+      "fiscalYear": 2026,
+      "announcementDate": null,
+      "amountPerShareKes": 0.85,
+      "booksClosureDate": null,
+      "exDate": null,
+      "paymentDate": null,
+      "status": "PAID",
+      "sourceUrl": "https://www.safaricom.co.ke/images/Downloads/2026_Safaricom_Annual_Report_Updated.pdf",
+      "_note": "Amount confirmed (0.85 + 1.15 FINAL = 2.00, matching fundamentals.json's dpsDeclaredKes exactly). Dates genuinely unknown — the interim dividend's own announcement/books-closure/payment dates would have been disclosed separately, earlier in FY2026, and weren't supplied. status=PAID is inferred from the annual report reporting it as an already-completed payout, not from a direct date confirmation — worth a second look if precision matters here."
+    }
+  ]
+}
