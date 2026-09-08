@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nse
+      POSTGRES_PASSWORD: nse
+      POSTGRES_DB: nse_tracker
+    ports:
+      - "5432:5432"
+    volumes:
+      - nse_pg_data:/var/lib/postgresql/data
+
+volumes:
+  nse_pg_data:
