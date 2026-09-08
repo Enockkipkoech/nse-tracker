@@ -1,0 +1,9 @@
+packages:
+- "packages/*"
+allowBuilds:
+  msgpackr-extract: true
+  workerd: true
+  '@prisma/client': true
+  esbuild: true
+  '@prisma/engines': true
+  prisma: true

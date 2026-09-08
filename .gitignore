@@ -1,0 +1,27 @@
+# dependencies
+node_modules/
+packages/*/node_modules/
+
+# env — never commit real credentials (this repo's .env has a live Supabase
+# connection string and READ_TOKEN; only .env.example is tracked)
+.env
+.env.local
+.env.*.local
+
+# build output
+dist/
+packages/*/dist/
+.turbo/
+
+# Prisma
+packages/db/prisma/generated/
+
+# generated captures — re-fetchable via `pnpm run fetch:board`, not source data.
+# fixtures/fundamentals.json and fixtures/corporate-actions.json ARE tracked —
+# those are hand-curated from annual reports, not generated, and are exactly
+# the kind of data that shouldn't need re-entering after a fresh clone.
+fixtures/board.json
+
+# logs / OS cruft
+*.log
+.DS_Store
