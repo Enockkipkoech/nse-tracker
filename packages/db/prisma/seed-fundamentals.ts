@@ -35,10 +35,9 @@ config({ path: path.resolve(__dirname, "../../../.env") });
 // `prisma` CLI (`prisma db seed`, `prisma migrate dev`). Without this,
 // DATABASE_URL is never in process.env when PrismaClient is constructed.
 
-import { PrismaClient } from "@prisma/client";
 import { readFileSync } from "node:fs";
+import { prisma, upsertFundamental } from "../src/client";
 
-const prisma = new PrismaClient();
 const FIXTURE_PATH = process.env.FUNDAMENTALS_FIXTURE ?? "fixtures/fundamentals.json";
 
 interface FundamentalRow {
@@ -70,60 +69,31 @@ async function main() {
 
   for (const row of rows) {
     // A row with no reportUrl and no real figures is a template placeholder,
-    // not data. dpsDeclared counts as a real figure now — it didn't before
-    // this refactor, which meant a row with a real, sourced dividend but no
-    // revenue/PAT/EPS (exactly UMME's situation) was wrongly treated as an
-    // empty placeholder and silently skipped.
+    // not data — this pre-filter is seed-script/bulk-fixture specific (an
+    // admin submitting a form has no equivalent "template" concept), so it
+    // stays here rather than in the shared function. dpsDeclared counts as
+    // a real figure — it didn't before an earlier refactor, which meant a
+    // row with a real, sourced dividend but no revenue/PAT/EPS (exactly
+    // UMME's situation) was wrongly treated as an empty placeholder.
     const hasRealFigures = row.revenue != null || row.pat != null || row.epsBasic != null || row.dpsDeclared != null;
     if (!hasRealFigures) {
       skippedPlaceholder++;
       continue;
     }
 
-    if (!row.reportUrl) {
-      console.error(`SKIP ${row.ticker} ${row.periodEnd}: has figures but no reportUrl — refusing to seed unsourced data`);
-      skippedInvalid++;
-      continue;
-    }
-
     const security = known.get(row.ticker);
-    if (!security) {
-      console.error(`SKIP ${row.ticker}: not in security_master — run prisma/seed.ts first`);
+
+    // reportUrl-required, ticker-must-exist, and sourceTier-allowlist rules
+    // all live in upsertFundamental now, shared with the /admin HTTP route
+    // — not duplicated here. See packages/db/src/admin.ts.
+    const result = await upsertFundamental(row);
+    if (!result.ok) {
+      console.error(`SKIP ${row.ticker} ${row.periodEnd}: ${result.error}`);
       skippedInvalid++;
       continue;
     }
 
-    await prisma.fundamental.upsert({
-      where: { ticker_periodEnd: { ticker: row.ticker, periodEnd: new Date(row.periodEnd) } },
-      create: {
-        ticker: row.ticker,
-        periodEnd: new Date(row.periodEnd),
-        periodType: row.periodType,
-        isAudited: row.isAudited,
-        revenue: row.revenue,
-        pat: row.pat,
-        epsBasic: row.epsBasic,
-        dpsDeclared: row.dpsDeclared,
-        bookValuePerShare: row.bookValuePerShare,
-        reportUrl: row.reportUrl,
-        sourceTier: row.sourceTier ?? undefined,
-        extra: row.extra ?? undefined,
-      },
-      update: {
-        periodType: row.periodType,
-        isAudited: row.isAudited,
-        revenue: row.revenue,
-        pat: row.pat,
-        epsBasic: row.epsBasic,
-        dpsDeclared: row.dpsDeclared,
-        bookValuePerShare: row.bookValuePerShare,
-        reportUrl: row.reportUrl,
-        sourceTier: row.sourceTier ?? undefined,
-        extra: row.extra ?? undefined,
-      },
-    });
-
-    await crossCheck(row, security.reportingCurrency, security.exchangeCurrency);
+    if (security) await crossCheck(row, security.reportingCurrency, security.exchangeCurrency);
     seeded++;
   }
 

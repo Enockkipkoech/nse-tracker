@@ -25,10 +25,9 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 config({ path: path.resolve(__dirname, "../../../.env") });
 
-import { PrismaClient } from "@prisma/client";
 import { readFileSync } from "node:fs";
+import { prisma, upsertCorporateAction } from "../src/client";
 
-const prisma = new PrismaClient();
 const FIXTURE_PATH = process.env.CORPORATE_ACTIONS_FIXTURE ?? "fixtures/corporate-actions.json";
 
 interface ActionRow {
@@ -53,61 +52,19 @@ async function main() {
   const raw = JSON.parse(readFileSync(FIXTURE_PATH, "utf-8")) as { actions: ActionRow[] };
   const rows = raw.actions ?? [];
 
-  const known = new Set((await prisma.securityMaster.findMany({ select: { ticker: true } })).map(r => r.ticker));
-
   let seeded = 0, skippedInvalid = 0;
 
   for (const row of rows) {
-    // Same rule as fundamentals: an amount with no source is a claim, not a
-    // fact. A row with no amount at all (a pure placeholder) isn't checked
-    // here since none currently exist in the fixture — add that guard if
-    // this fixture grows placeholder rows the way fundamentals.json did.
-    if (row.amountPerShare != null && !row.sourceUrl) {
-      console.error(`SKIP ${row.actionId}: has an amount but no sourceUrl — refusing to seed unsourced data`);
+    // reportUrl/sourceUrl-required-if-amount-present, ticker-must-exist,
+    // and enum-validity rules all live in upsertCorporateAction now, shared
+    // with the /admin HTTP route — not duplicated here. See
+    // packages/db/src/admin.ts.
+    const result = await upsertCorporateAction(row);
+    if (!result.ok) {
+      console.error(`SKIP ${row.actionId}: ${result.error}`);
       skippedInvalid++;
       continue;
     }
-
-    if (!known.has(row.ticker)) {
-      console.error(`SKIP ${row.actionId}: ticker ${row.ticker} not in security_master — run prisma/seed.ts first`);
-      skippedInvalid++;
-      continue;
-    }
-
-    await prisma.corporateAction.upsert({
-      where: { actionId: row.actionId },
-      create: {
-        actionId: row.actionId,
-        ticker: row.ticker,
-        actionType: row.actionType as never, // enum cast — validated by Prisma at the DB layer
-        dividendType: (row.dividendType as never) ?? undefined,
-        fiscalYear: row.fiscalYear ?? undefined,
-        announcementDate: row.announcementDate ? new Date(row.announcementDate) : undefined,
-        amountPerShare: row.amountPerShare ?? undefined,
-        ratio: row.ratio ?? undefined,
-        booksClosureDate: row.booksClosureDate ? new Date(row.booksClosureDate) : undefined,
-        exDate: row.exDate ? new Date(row.exDate) : undefined,
-        paymentDate: row.paymentDate ? new Date(row.paymentDate) : undefined,
-        status: row.status as never,
-        sourceUrl: row.sourceUrl ?? undefined,
-        sourceTier: row.sourceTier ?? undefined,
-        verifiedAt: new Date(),
-      },
-      update: {
-        dividendType: (row.dividendType as never) ?? undefined,
-        fiscalYear: row.fiscalYear ?? undefined,
-        announcementDate: row.announcementDate ? new Date(row.announcementDate) : undefined,
-        amountPerShare: row.amountPerShare ?? undefined,
-        ratio: row.ratio ?? undefined,
-        booksClosureDate: row.booksClosureDate ? new Date(row.booksClosureDate) : undefined,
-        exDate: row.exDate ? new Date(row.exDate) : undefined,
-        paymentDate: row.paymentDate ? new Date(row.paymentDate) : undefined,
-        status: row.status as never,
-        sourceUrl: row.sourceUrl ?? undefined,
-        sourceTier: row.sourceTier ?? undefined,
-        verifiedAt: new Date(),
-      },
-    });
     seeded++;
   }
 
