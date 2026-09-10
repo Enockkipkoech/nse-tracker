@@ -20,13 +20,14 @@
       "dividendType": "FINAL",
       "fiscalYear": 2026,
       "announcementDate": "2026-05-06",
-      "amountPerShareKes": 1.15,
+      "amountPerShare": 1.15,
       "booksClosureDate": "2026-08-04",
       "exDate": null,
       "paymentDate": "2026-09-04",
       "status": "PAID",
       "sourceUrl": "https://www.nse.co.ke/wp-content/uploads/Safaricom-Plc-%E2%80%93Audited-Results-for-the-Year-Ended-31-March-2026.pdf",
-      "_note": "exDate not supplied — typically T-1 or T-2 from booksClosureDate on the NSE, but that offset was flagged in the original schema doc as something to confirm per-announcement, not compute. Left null rather than guessed. announcementDate uses the Board approval date (2026-05-06); AGM date (2026-07-31, when shareholders approved the payout) isn't a schema field — kept in fundamentals.json's extra blob for SCOM's FY2026 period instead."
+      "_note": "exDate not supplied — typically T-1 or T-2 from booksClosureDate on the NSE, but that offset was flagged in the original schema doc as something to confirm per-announcement, not compute. Left null rather than guessed. announcementDate uses the Board approval date (2026-05-06); AGM date (2026-07-31, when shareholders approved the payout) isn't a schema field — kept in fundamentals.json's extra blob for SCOM's FY2026 period instead.",
+      "sourceTier": "primary"
     },
     {
       "actionId": "SCOM-CASH_DIVIDEND-INTERIM-FY2026",
@@ -35,13 +36,46 @@
       "dividendType": "INTERIM",
       "fiscalYear": 2026,
       "announcementDate": null,
-      "amountPerShareKes": 0.85,
+      "amountPerShare": 0.85,
       "booksClosureDate": null,
       "exDate": null,
       "paymentDate": null,
       "status": "PAID",
       "sourceUrl": "https://www.safaricom.co.ke/images/Downloads/2026_Safaricom_Annual_Report_Updated.pdf",
-      "_note": "Amount confirmed (0.85 + 1.15 FINAL = 2.00, matching fundamentals.json's dpsDeclaredKes exactly). Dates genuinely unknown — the interim dividend's own announcement/books-closure/payment dates would have been disclosed separately, earlier in FY2026, and weren't supplied. status=PAID is inferred from the annual report reporting it as an already-completed payout, not from a direct date confirmation — worth a second look if precision matters here."
+      "_note": "Amount confirmed (0.85 + 1.15 FINAL = 2.00, matching fundamentals.json's dpsDeclaredKes exactly). Dates genuinely unknown — the interim dividend's own announcement/books-closure/payment dates would have been disclosed separately, earlier in FY2026, and weren't supplied. status=PAID is inferred from the annual report reporting it as an already-completed payout, not from a direct date confirmation — worth a second look if precision matters here.",
+      "sourceTier": "primary"
+    },
+    {
+      "actionId": "UMME-CASH_DIVIDEND-INTERIM-FY2025",
+      "ticker": "UMME",
+      "actionType": "CASH_DIVIDEND",
+      "dividendType": "INTERIM",
+      "fiscalYear": 2025,
+      "announcementDate": null,
+      "amountPerShare": 222.0,
+      "booksClosureDate": null,
+      "exDate": null,
+      "paymentDate": null,
+      "status": "PAID",
+      "sourceUrl": "https://www.umeme.co.ug/investor-relations/reports",
+      "_note": "amountPerShare=222.0 is real and in Ugandan Shillings (Ushs) — see security_master.reporting_currency=UGX for this ticker, set via @nse/lib's REPORTING_CURRENCY_OVERRIDES. Before the reporting_currency refactor this field was named amountPerShareKes and had to stay null: writing 222.0 into a column literally typed for Kenya Shillings would have repeated, inside this seed data, the exact currency-conflation bug this record exists to help document (see fixtures/fundamentals.json's UMME entry, and quality_log's YIELD_IMPLAUSIBLE / DPS_DIVERGENCE / YIELD_FIELD_MISMATCH entries for this ticker on 2026-09-09). Source: Umeme's FY2025 Financial Statement, interim dividend of Ushs 222.0/share (Ushs 360,501 million total), paid during 2025. status=PAID is a real fact from the financial statement's cash-flow line (past tense, audited); the specific day is not — no announcement/books-closure/payment date was found in the four source documents reviewed, so those stay null rather than guessed. A second dividend event (FY2024 interim, Ushs 26.0/share per the same statement's comparative column) was found but not added here — its relationship to the FY2023 catch-up payment shown in the same table was not confidently disentangled from the extracted text alone, and a wrong entry here would be worse than an incomplete one.",
+      "sourceTier": "primary"
+    },
+    {
+      "actionId": "BKG-CASH_DIVIDEND-FINAL-FY2025",
+      "ticker": "BKG",
+      "actionType": "CASH_DIVIDEND",
+      "dividendType": "FINAL",
+      "fiscalYear": 2025,
+      "announcementDate": null,
+      "amountPerShare": 53.04,
+      "booksClosureDate": "2026-05-15",
+      "exDate": null,
+      "paymentDate": "2026-06-19",
+      "status": "PAID",
+      "sourceUrl": "https://africanfinancials.com/document/ke-bkg-2026-pr-q1/",
+      "_note": "SOURCING TIER DIFFERENT FROM EVERY OTHER ENTRY IN THIS FILE: this row comes from a Google AI Overview citing secondary aggregators (simplywall.st, stockanalysis.com, tradingview.com's dividends page, africanfinancials.com) — not a primary company/NSE/RSE document directly reviewed in this session, unlike SCOM's and UMME's entries above. amountPerShare=53.04 passes an independent arithmetic cross-check (45% payout ratio x BK Group's own primary-source FY2025 EPS of 117.8 RWF = 53.01, matching to within 0.03) and is consistent with TradingView's own already-captured derived yield for BKG within 1.9% when converted at BK Group's own stated FX rate — structurally unlike UMME's ~27-28x currency conflation. This is meaningful corroboration, not proof: exDate and announcementDate were not given by the source and are left null rather than guessed, consistent with this fixture's standing rule. Recommend fetching the africanfinancials.com document directly (or an NSE/RSE announcement) to upgrade this to primary-source-confirmed before treating it with the same confidence as this file's other entries. See fixtures/fundamentals.json's BKG FY2025 entry for the full corroboration detail and the discrepancy found in the AI Overview's own (unreliable) KES conversion math.",
+      "sourceTier": "secondary_corroborated"
     }
   ]
 }
