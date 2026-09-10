@@ -57,3 +57,11 @@ All `/v1/*` routes require `Authorization: Bearer <READ_TOKEN>`.
 ## Status
 
 Backend functional end to end: capture, sector mapping (60/60), dividend derivation with cross-validation, fundamentals/corporate-actions seeding. Frontend not yet built.
+
+
+### TESTING COMMANDS
+```bash
+
+curl -X POST -H "Authorization: Bearer change-me" http://localhost:3000/v1/capture/intraday
+
+```
