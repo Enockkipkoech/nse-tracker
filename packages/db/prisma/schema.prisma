@@ -9,10 +9,11 @@ generator client {
   provider = "prisma-client-js"
 }
 
+
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  url       = env("DATABASE_URL") 
+  directUrl = env("DIRECT_URL") 
 }
 
 enum InstrumentType {
@@ -71,80 +72,131 @@ enum Severity {
 }
 
 model SecurityMaster {
-  ticker           String         @id
-  tvSymbol         String?        @unique @map("tv_symbol") // NSEKE:XXXX
-  isin             String?        @unique
-  companyName      String         @map("company_name")
-  nseSector        String?        @map("nse_sector") // official 13-segment enum lives in application code, not DB — see lib/sectors.ts
-  sectorUpstream   String?        @map("sector_upstream") // last-seen TradingView `sector`, drift detection only
-  industryUpstream String?        @map("industry_upstream") // TradingView `industry` — the field that actually splits Banking/Insurance
-  instrumentType   InstrumentType @default(ORDINARY) @map("instrument_type")
-  parentTicker     String?        @map("parent_ticker") // e.g. KPLC.P0004 -> KPLC
-  formerTicker     String?        @map("former_ticker") // e.g. HFCK -> HFCB rebrand
-  tickerChangeDate DateTime?      @map("ticker_change_date") @db.Date
-  board            String         @default("MIMS")
-  sharesIssued     BigInt?        @map("shares_issued") // curated, human-verified — never market_cap/price
-  freeFloatShares  BigInt?        @map("free_float_shares")
-  currency         String         @default("KES")
-  status           SecurityStatus @default(ACTIVE)
-  inMarketCap      Boolean        @default(true) @map("in_market_cap") // false for ETFs/prefs — excluded from board totals
-  coveredByTv      Boolean        @default(false) @map("covered_by_tv")
-  listingDate      DateTime?      @map("listing_date") @db.Date
-  fiscalYearEnd    String?        @map("fiscal_year_end")
-  sourceUrl        String?        @map("source_url")
-  verifiedAt       DateTime?      @map("verified_at")
-  updatedAt        DateTime       @updatedAt @map("updated_at")
+  ticker            String          @id
+  tvSymbol          String?         @unique @map("tv_symbol")     // NSEKE:XXXX
+  isin              String?         @unique
+  companyName       String          @map("company_name")
+  nseSector         String?         @map("nse_sector")            // official 13-segment enum lives in application code, not DB — see lib/sectors.ts
+  sectorUpstream    String?         @map("sector_upstream")       // last-seen TradingView `sector`, drift detection only
+  industryUpstream  String?         @map("industry_upstream")     // TradingView `industry` — the field that actually splits Banking/Insurance
+  instrumentType    InstrumentType  @default(ORDINARY) @map("instrument_type")
+  parentTicker      String?         @map("parent_ticker")         // e.g. KPLC.P0004 -> KPLC
+  formerTicker      String?         @map("former_ticker")         // e.g. HFCK -> HFCB rebrand
+  tickerChangeDate  DateTime?       @map("ticker_change_date") @db.Date
+  board             String          @default("MIMS")
+  sharesIssued      BigInt?         @map("shares_issued")         // curated, human-verified — never market_cap/price
+  freeFloatShares   BigInt?         @map("free_float_shares")
+  exchangeCurrency  String          @default("KES") @map("exchange_currency")
+  // What currency the NSE-quoted price itself is in. Same for every ticker
+  // in this universe today (KES) but kept explicit, not assumed — it's
+  // fetched fresh from TradingView's own `currency` field on every capture,
+  // not hand-entered, so a future genuinely-non-KES listing would surface
+  // here rather than silently defaulting wrong.
+  reportingCurrency String          @default("KES") @map("reporting_currency")
+  // What currency the company's OWN financial statements and declared
+  // dividends are denominated in — genuinely different from exchangeCurrency
+  // for a cross-listed security. Confirmed distinct for two tickers so far:
+  // UMME (Umeme, Uganda-domiciled, reports in UGX — traced directly to a
+  // 393% derived dividend yield caused by dividing a UGX dividend by a KES
+  // price with no conversion) and BKG (Bank of Kigali, Rwanda-domiciled,
+  // reports in RWF — structurally identical situation, NOT yet confirmed to
+  // have the same bug since its derived yield happens to look plausible
+  // rather than screaming-implausible, which is the more dangerous case:
+  // nothing currently catches a wrong number that looks reasonable).
+  // Defaults to "KES" because that's correct for the other 58 tickers;
+  // overrides live in @nse/lib's REPORTING_CURRENCY_OVERRIDES, applied at
+  // seed time, not guessed per-row.
+  status            SecurityStatus  @default(ACTIVE)
+  inMarketCap       Boolean         @default(true) @map("in_market_cap") // false for ETFs/prefs — excluded from board totals
+  coveredByTv       Boolean         @default(false) @map("covered_by_tv")
+  listingDate       DateTime?       @map("listing_date") @db.Date
+  fiscalYearEnd     String?         @map("fiscal_year_end")
+  sourceUrl         String?         @map("source_url")
+  verifiedAt        DateTime?       @map("verified_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
 
-  dailyPrices      DailyPrice[]
-  corporateActions CorporateAction[]
-  fundamentals     Fundamental[]
+  dailyPrices       DailyPrice[]
+  corporateActions  CorporateAction[]
+  fundamentals      Fundamental[]
 
   @@map("security_master")
 }
 
 model DailyPrice {
-  id        Int      @id @default(autoincrement())
-  tradeDate DateTime @map("trade_date") @db.Date
-  ticker    String
-  revision  Int      @default(0)
+  id                Int          @id @default(autoincrement())
+  tradeDate         DateTime     @map("trade_date") @db.Date
+  ticker            String
+  revision          Int          @default(0)
 
-  open      Decimal? @db.Decimal(12, 4)
-  high      Decimal? @db.Decimal(12, 4)
-  low       Decimal? @db.Decimal(12, 4)
-  close     Decimal? @db.Decimal(12, 4)
-  prevClose Decimal? @map("prev_close") @db.Decimal(12, 4)
-  changeKes Decimal? @map("change_kes") @db.Decimal(12, 4)
-  changePct Decimal? @map("change_pct") @db.Decimal(8, 4)
-  gapPct    Decimal? @map("gap_pct") @db.Decimal(8, 4)
+  open              Decimal?     @db.Decimal(12, 4)
+  high              Decimal?     @db.Decimal(12, 4)
+  low               Decimal?     @db.Decimal(12, 4)
+  close             Decimal?     @db.Decimal(12, 4)
+  prevClose         Decimal?     @map("prev_close") @db.Decimal(12, 4)
+  changeKes         Decimal?     @map("change_kes") @db.Decimal(12, 4)
+  changePct         Decimal?     @map("change_pct") @db.Decimal(8, 4)
+  gapPct            Decimal?     @map("gap_pct") @db.Decimal(8, 4)
 
-  high52w Decimal? @map("high_52w") @db.Decimal(12, 4)
-  low52w  Decimal? @map("low_52w") @db.Decimal(12, 4)
+  high52w           Decimal?     @map("high_52w") @db.Decimal(12, 4)
+  low52w            Decimal?     @map("low_52w") @db.Decimal(12, 4)
+  highAll           Decimal?     @map("high_all") @db.Decimal(12, 4)   // all-time high — distinct from 52w
+  lowAll            Decimal?     @map("low_all") @db.Decimal(12, 4)
 
-  volume         BigInt?
-  valueTradedKes Decimal? @map("value_traded_kes") @db.Decimal(18, 2) // volume*close — NOT exchange turnover
-  turnoverKes    Decimal? @map("turnover_kes") @db.Decimal(18, 2) // NSE PDF leg only
-  deals          Int?
+  volume            BigInt?
+  valueTradedKes    Decimal?     @map("value_traded_kes") @db.Decimal(18, 2)  // volume*close — NOT exchange turnover
+  turnoverKes       Decimal?     @map("turnover_kes") @db.Decimal(18, 2)      // NSE PDF leg only
+  deals             Int?
+  avgVolume10d      Decimal?     @map("avg_volume_10d") @db.Decimal(18, 2)
+  avgVolume30d      Decimal?     @map("avg_volume_30d") @db.Decimal(18, 2)   // the liquidity_tier bucketing
+                                                                              // recommended in the original schema
+                                                                              // doc needs exactly this — was fetched
+                                                                              // and discarded every capture until now
+  relativeVolume10d Decimal?     @map("relative_volume_10d") @db.Decimal(10, 4)
 
-  marketCapKes      Decimal? @map("market_cap_kes") @db.Decimal(20, 2) // computed: close * sharesOutstanding
-  sharesOutstanding Decimal? @map("shares_outstanding") @db.Decimal(20, 0)
+  marketCapKes      Decimal?     @map("market_cap_kes") @db.Decimal(20, 2)   // computed: close * sharesOutstanding
+  sharesOutstanding Decimal?     @map("shares_outstanding") @db.Decimal(20, 0)
 
-  peRatio Decimal? @map("pe_ratio") @db.Decimal(10, 4)
-  pbRatio Decimal? @map("pb_ratio") @db.Decimal(10, 4)
-  epsTtm  Decimal? @map("eps_ttm") @db.Decimal(10, 4)
+  peRatio           Decimal?     @map("pe_ratio") @db.Decimal(10, 4)
+  pbRatio           Decimal?     @map("pb_ratio") @db.Decimal(10, 4)
+  epsTtm            Decimal?     @map("eps_ttm") @db.Decimal(10, 4)
+  epsDilutedTtm     Decimal?     @map("eps_diluted_ttm") @db.Decimal(10, 4)
 
-  dividendYieldPct Decimal? @map("dividend_yield_pct") @db.Decimal(8, 4)
-  dpsDerivedKes    Decimal? @map("dps_derived_kes") @db.Decimal(10, 4)
-  dpsConfidence    String?  @map("dps_confidence") // high | low | none
-  payoutRatioPct   Decimal? @map("payout_ratio_pct") @db.Decimal(8, 4)
+  dividendYieldPct  Decimal?     @map("dividend_yield_pct") @db.Decimal(8, 4)
+  dividendYieldRaw        Decimal? @map("dividend_yield_raw") @db.Decimal(10, 4)          // the two inputs behind
+  dividendYieldCurrentRaw Decimal? @map("dividend_yield_current_raw") @db.Decimal(10, 4)   // YIELD_FIELD_MISMATCH —
+                                                                                            // preserved so a future
+                                                                                            // UMME-style investigation
+                                                                                            // has real history to
+                                                                                            // replay, not just today's
+                                                                                            // live re-fetch
+  dpsDerivedKes     Decimal?     @map("dps_derived_kes") @db.Decimal(10, 4)
+  dpsConfidence     String?      @map("dps_confidence")     // high | low | none
+  payoutRatioPct    Decimal?     @map("payout_ratio_pct") @db.Decimal(8, 4)
+  dividendStreakYears  Int?      @map("dividend_streak_years")   // SCOM's "18 consecutive years" — quoted as a
+  dividendGrowthYears  Int?      @map("dividend_growth_years")   // headline metric in the original design, never
+                                                                  // actually kept until now
 
-  isStale    Boolean     @default(false) @map("is_stale")
-  tradedFlag Boolean?    @map("traded_flag")
-  source     PriceSource
-  requestId  String?     @map("request_id")
-  capturedAt DateTime    @map("captured_at")
-  rawRef     String?     @map("raw_ref") // object storage key/path of the raw snapshot
+  perf1w            Decimal?     @map("perf_1w") @db.Decimal(10, 4)
+  perf1m            Decimal?     @map("perf_1m") @db.Decimal(10, 4)
+  perf3m            Decimal?     @map("perf_3m") @db.Decimal(10, 4)
+  perf6m            Decimal?     @map("perf_6m") @db.Decimal(10, 4)
+  perfYtd           Decimal?     @map("perf_ytd") @db.Decimal(10, 4)
+  perf1y            Decimal?     @map("perf_1y") @db.Decimal(10, 4)
 
-  security SecurityMaster @relation(fields: [ticker], references: [ticker])
+  isStale           Boolean      @default(false) @map("is_stale")
+  tradedFlag        Boolean?     @map("traded_flag")
+  delaySeconds      Int?         @map("delay_seconds")     // confirmed 900 (15min) at build time — kept per-row so
+                                                             // a future change in TradingView's delay characteristic
+                                                             // would actually show up in history, not just today
+  lastUpdateTime    DateTime?    @map("last_update_time")   // freshness signal distinct from tradeDate; previously
+                                                             // used only transiently to compute STALE_BAR, then
+                                                             // discarded rather than kept for later audit
+  source            PriceSource
+  requestId         String?      @map("request_id")
+  capturedAt        DateTime     @map("captured_at")
+  rawRef            String?      @map("raw_ref")          // object storage key/path of the raw snapshot
+
+  security          SecurityMaster @relation(fields: [ticker], references: [ticker])
 
   @@unique([tradeDate, ticker, revision, source])
   @@index([ticker, tradeDate(sort: Desc)])
@@ -159,36 +211,41 @@ model DailyPrice {
 /// No FK to SecurityMaster — this table is high-volume and append-only by
 /// design; unknown tickers are logged to QualityLog and skipped, not blocked.
 model IntradayTick {
-  capturedAt        DateTime  @map("captured_at") @db.Timestamptz(3)
-  ticker            String
-  price             Decimal?  @db.Decimal(12, 4)
-  changePct         Decimal?  @map("change_pct") @db.Decimal(8, 4)
-  volume            BigInt?
-  marketCapKes      Decimal?  @map("market_cap_kes") @db.Decimal(20, 2)
-  tradeDateInferred DateTime? @map("trade_date_inferred") @db.Date // from bar_time; for grouping into a session
+  capturedAt      DateTime  @map("captured_at") @db.Timestamptz(3)
+  ticker          String
+  price           Decimal?  @db.Decimal(12, 4)
+  changePct       Decimal?  @map("change_pct") @db.Decimal(8, 4)
+  volume          BigInt?
+  marketCapKes    Decimal?  @map("market_cap_kes") @db.Decimal(20, 2)
+  tradeDateInferred DateTime? @map("trade_date_inferred") @db.Date  // from bar_time; for grouping into a session
 
   @@id([capturedAt, ticker])
   @@index([ticker, capturedAt(sort: Desc)])
   @@map("intraday_ticks")
 }
 
-model CorporateAction {
-  actionId          String         @id @map("action_id")
-  ticker            String
-  actionType        CorpActionType @map("action_type")
-  dividendType      DividendType?  @map("dividend_type")
-  fiscalYear        Int?           @map("fiscal_year")
-  announcementDate  DateTime?      @map("announcement_date") @db.Date
-  amountPerShareKes Decimal?       @map("amount_per_share_kes") @db.Decimal(10, 4)
-  ratio             String?
-  booksClosureDate  DateTime?      @map("books_closure_date") @db.Date
-  exDate            DateTime?      @map("ex_date") @db.Date
-  paymentDate       DateTime?      @map("payment_date") @db.Date
-  status            ActionStatus   @default(ANNOUNCED)
-  sourceUrl         String?        @map("source_url")
-  verifiedAt        DateTime?      @map("verified_at")
 
-  security SecurityMaster @relation(fields: [ticker], references: [ticker])
+model CorporateAction {
+  actionId            String        @id @map("action_id")
+  ticker               String
+  actionType            CorpActionType @map("action_type")
+  dividendType          DividendType?  @map("dividend_type")
+  fiscalYear            Int?           @map("fiscal_year")
+  announcementDate      DateTime?      @map("announcement_date") @db.Date
+  amountPerShare        Decimal?       @map("amount_per_share") @db.Decimal(10, 4)
+  // In the security's reportingCurrency, same rule as Fundamental above —
+  // not assumed KES.
+  ratio                 String?
+  booksClosureDate      DateTime?      @map("books_closure_date") @db.Date
+  exDate                DateTime?      @map("ex_date") @db.Date
+  paymentDate           DateTime?      @map("payment_date") @db.Date
+  status                ActionStatus   @default(ANNOUNCED)
+  sourceUrl             String?        @map("source_url")
+  sourceTier            String?        @map("source_tier")   // same rule as Fundamental.sourceTier — BKG's FY2025
+                                                               // dividend row is the exact case this exists for
+  verifiedAt            DateTime?      @map("verified_at")
+
+  security              SecurityMaster @relation(fields: [ticker], references: [ticker])
 
   @@index([ticker, exDate(sort: Desc)])
   @@map("corporate_actions")
@@ -196,15 +253,34 @@ model CorporateAction {
 
 model Fundamental {
   ticker            String
-  periodEnd         DateTime @map("period_end") @db.Date
-  periodType        String?  @map("period_type") // FY | HY | Q1 | Q3
-  isAudited         Boolean? @map("is_audited")
-  revenueKes        Decimal? @map("revenue_kes") @db.Decimal(18, 2)
-  patKes            Decimal? @map("pat_kes") @db.Decimal(18, 2)
-  epsBasicKes       Decimal? @map("eps_basic_kes") @db.Decimal(10, 4)
-  dpsDeclaredKes    Decimal? @map("dps_declared_kes") @db.Decimal(10, 4)
-  bookValuePerShare Decimal? @map("book_value_per_share_kes") @db.Decimal(10, 4)
-  reportUrl         String?  @map("report_url")
+  periodEnd         DateTime  @map("period_end") @db.Date
+  periodType        String?   @map("period_type")   // FY | HY | Q1 | Q3
+  isAudited         Boolean?  @map("is_audited")
+  revenue           Decimal?  @map("revenue") @db.Decimal(18, 2)
+  pat               Decimal?  @map("pat") @db.Decimal(18, 2)
+  epsBasic          Decimal?  @map("eps_basic") @db.Decimal(10, 4)
+  dpsDeclared       Decimal?  @map("dps_declared") @db.Decimal(10, 4)
+  bookValuePerShare Decimal?  @map("book_value_per_share") @db.Decimal(10, 4)
+  // All five above are in the SECURITY'S reportingCurrency (SecurityMaster),
+  // not necessarily KES — deliberately unsuffixed after UMME proved that
+  // *Kes-suffixed names actively lie for a cross-listed security. A row's
+  // currency is a join, not a naming convention. See sectors.ts's
+  // REPORTING_CURRENCY_OVERRIDES for which tickers aren't KES.
+  reportUrl         String?   @map("report_url")
+  // Provenance tier, separate from isAudited (which distinguishes audited
+  // vs reviewed WITHIN primary sources). This distinguishes primary vs
+  // secondary sourcing entirely — surfaced by BKG's FY2025 dividend figure,
+  // which came from a Google AI Overview citing secondary aggregators, not
+  // a company/NSE/RSE document, yet was indistinguishable from SCOM's
+  // audited-PDF-sourced figures once seeded. Free-text, not an enum: the
+  // vocabulary is still settling ("primary", "secondary_corroborated",
+  // "secondary_uncorroborated", "mixed" so far) and a String avoids a
+  // migration every time a new tier is needed. When a row is genuinely
+  // mixed (BKG's FY2025 row: epsBasic/bookValuePerShare are primary,
+  // dpsDeclared is secondary-corroborated), set this to "mixed" and put
+  // the field-level breakdown in `extra` as prose — that granularity isn't
+  // worth a column per field.
+  sourceTier        String?   @map("source_tier")
   // Everything else a report contains that doesn't fit a universal column —
   // EBITDA, PBT, tax, NCI, segment revenue, auditor, whatever a given
   // sector's statement breaks out. Deliberately NOT typed columns: a bank's
@@ -216,50 +292,50 @@ model Fundamental {
   // column here for a figure used by one or two tickers.
   extra             Json?
 
-  security SecurityMaster @relation(fields: [ticker], references: [ticker])
+  security          SecurityMaster @relation(fields: [ticker], references: [ticker])
 
   @@id([ticker, periodEnd])
   @@map("fundamentals")
 }
 
 model MarketStats {
-  tradeDate         DateTime  @id @map("trade_date") @db.Date
-  nasi              Decimal?  @db.Decimal(10, 4)
-  nse20             Decimal?  @db.Decimal(10, 4)
-  nse25             Decimal?  @db.Decimal(10, 4)
-  nse10             Decimal?  @db.Decimal(10, 4)
-  bankingIndex      Decimal?  @map("banking_index") @db.Decimal(10, 4)
-  totalMarketCapKes Decimal?  @map("total_market_cap_kes") @db.Decimal(20, 2)
-  equityTurnoverKes Decimal?  @map("equity_turnover_kes") @db.Decimal(18, 2)
-  totalDeals        Int?      @map("total_deals")
-  netForeignFlowKes Decimal?  @map("net_foreign_flow_kes") @db.Decimal(18, 2)
-  usdKesRate        Decimal?  @map("usd_kes_rate") @db.Decimal(10, 4)
-  tbill91dPct       Decimal?  @map("tbill_91d_pct") @db.Decimal(8, 4)
-  advancers         Int?
-  decliners         Int?
-  unchanged         Int?
-  source            String?
-  capturedAt        DateTime? @map("captured_at")
+  tradeDate           DateTime  @id @map("trade_date") @db.Date
+  nasi                Decimal?  @db.Decimal(10, 4)
+  nse20               Decimal?  @db.Decimal(10, 4)
+  nse25               Decimal?  @db.Decimal(10, 4)
+  nse10               Decimal?  @db.Decimal(10, 4)
+  bankingIndex        Decimal?  @map("banking_index") @db.Decimal(10, 4)
+  totalMarketCapKes   Decimal?  @map("total_market_cap_kes") @db.Decimal(20, 2)
+  equityTurnoverKes   Decimal?  @map("equity_turnover_kes") @db.Decimal(18, 2)
+  totalDeals          Int?      @map("total_deals")
+  netForeignFlowKes   Decimal?  @map("net_foreign_flow_kes") @db.Decimal(18, 2)
+  usdKesRate          Decimal?  @map("usd_kes_rate") @db.Decimal(10, 4)
+  tbill91dPct         Decimal?  @map("tbill_91d_pct") @db.Decimal(8, 4)
+  advancers           Int?
+  decliners           Int?
+  unchanged           Int?
+  source              String?
+  capturedAt          DateTime? @map("captured_at")
 
   @@map("market_stats")
 }
 
 model MarketCalendar {
-  calDate      DateTime @id @map("cal_date") @db.Date
-  isTradingDay Boolean  @map("is_trading_day")
-  holidayName  String?  @map("holiday_name")
+  calDate       DateTime @id @map("cal_date") @db.Date
+  isTradingDay  Boolean  @map("is_trading_day")
+  holidayName   String?  @map("holiday_name")
 
   @@map("market_calendar")
 }
 
 model QualityLog {
-  id        Int       @id @default(autoincrement())
-  loggedAt  DateTime  @default(now()) @map("logged_at")
-  severity  Severity
-  code      String
-  ticker    String?
-  tradeDate DateTime? @map("trade_date") @db.Date
-  detail    String
+  id         Int       @id @default(autoincrement())
+  loggedAt   DateTime  @default(now()) @map("logged_at")
+  severity   Severity
+  code       String
+  ticker     String?
+  tradeDate  DateTime? @map("trade_date") @db.Date
+  detail     String
 
   @@index([loggedAt(sort: Desc)])
   @@map("quality_log")
