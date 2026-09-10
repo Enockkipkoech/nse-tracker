@@ -20,7 +20,7 @@ packages/db/prisma/generated/
 # fixtures/fundamentals.json and fixtures/corporate-actions.json ARE tracked —
 # those are hand-curated from annual reports, not generated, and are exactly
 # the kind of data that shouldn't need re-entering after a fresh clone.
-fixtures/board.json
+packages/db/fixtures/board.json
 
 # logs / OS cruft
 *.log
