@@ -14,6 +14,7 @@
  *  5. dividends_per_share_* are null, but DPS is recoverable two ways
  *     that cross-check each other. See deriveDps().
  */
+import fs from "fs";
 
 const SCAN = "https://scanner.tradingview.com/kenya/scan";
 const UA = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0 Safari/537.36";
@@ -44,10 +45,7 @@ export const COLUMNS = [
   /*47*/ "update_mode", /*48*/ "time", /*49*/ "last_bar_update_time",
 ] as const;
 
-const IX: Record<string, number> = COLUMNS.reduce<Record<string, number>>((index, column, i) => {
-    index[column] = i;
-    return index;
-}, {});
+const IX: Record<string, number> = Object.fromEntries(COLUMNS.map((c, i) => [c, i]));
 
 export interface TvRow {
     ticker: string; symbol: string;
@@ -311,6 +309,9 @@ export async function fetchBoard(): Promise<{
     const body = (await res.json()) as { totalCount: number; data: Array<{ s: string; d: unknown[] }> };
     if (!Array.isArray(body.data)) throw new Error("TV_SHAPE: data[] missing — endpoint changed");
 
+    //TODO: [DEBUG] Add a json dump of the raw response
+    fs.writeFileSync("raw_response.json", JSON.stringify(body, null, 2));
+
     // A request without `columns` returns every d[] empty. That is a failure,
     // not 60 rows of nulls — it is exactly how the bare GET behaves.
     if (body.data.length && body.data.every(r => !r.d?.length))
@@ -364,6 +365,24 @@ export function assertRows(rows: TvRow[], tradeDate: string | null) {
             issues.push({
                 severity: "error", code: "PAYOUT_RATIO_ZERO_WITH_YIELD", ticker: r.ticker,
                 detail: `payout_ratio_ttm=0 but dividend_yield=${r.dividend_yield_raw}% — field broken, not "no dividend"`
+            });
+
+        // 50% is not a soft threshold — it's a hard ceiling on what's economically
+        // possible for a going concern's dividend yield. Confirmed real, not
+        // theoretical: UMME showed dividends_yield_current=393.65%, traced to
+        // TradingView dividing a Uganda-Shilling-denominated per-share dividend
+        // (26.0-222.0 Ushs, from Umeme's own FY2025 financial statements) by a
+        // Kenya-Shilling close price with no currency conversion between them —
+        // a cross-listing-specific bug in the upstream source, not something the
+        // two-route cross-check (deriveDps) can catch, since a currency-conflated
+        // number can still "agree" internally. This check is independent of
+        // dps_confidence for exactly that reason: high confidence from two
+        // routes agreeing says nothing about whether the underlying number is
+        // physically possible.
+        if (r.dividend_yield_pct != null && r.dividend_yield_pct > 50)
+            issues.push({
+                severity: "error", code: "YIELD_IMPLAUSIBLE", ticker: r.ticker,
+                detail: `yield=${r.dividend_yield_pct}% exceeds any plausible bound for a real dividend — likely a currency or reporting-period mismatch upstream (see UMME 2026-09-09 for a confirmed real case), not a genuine figure`
             });
 
         if (r.free_float_pct != null && (r.free_float_pct <= 0 || r.free_float_pct > 100))

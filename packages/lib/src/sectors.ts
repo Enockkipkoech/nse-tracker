@@ -134,3 +134,44 @@ export function resolveSector(
   return null; // left unmapped on purpose — surfaces in the seed script's coverage report
 }
 
+/**
+ * Reporting-currency overrides for cross-listed securities. Every ticker
+ * not listed here is assumed to report in KES — correct for the other 58,
+ * wrong only for a genuine foreign cross-listing.
+ *
+ * Each entry's confidence level is real, not uniform — say so explicitly
+ * rather than presenting both at the same certainty:
+ *
+ *   UMME — CONFIRMED. Traced directly against Umeme's own FY2025 Financial
+ *   Statement (four source PDFs reviewed): interim dividend of Ushs 222.0/
+ *   share, no final dividend declared for FY2025 or FY2024. This is what
+ *   explained TradingView's 393.65% derived yield (see YIELD_IMPLAUSIBLE)
+ *   — a UGX dividend divided by a KES price with no FX conversion.
+ *
+ *   BKG — STRUCTURALLY LIKELY, NOT CONFIRMED. Bank of Kigali, Rwanda-
+ *   domiciled, RSE-primary-listed since 2011, NSE cross-listed since 2018,
+ *   reports in RWF. Same structural situation as UMME. But BKG's derived
+ *   yield (7.15% on the 2026-09-09 capture) looks entirely plausible — no
+ *   annual report has been reviewed to confirm or rule out the same
+ *   currency-conflation bug the way UMME's four documents did. Included
+ *   here because the reporting-currency fact itself (RWF, not KES) is
+ *   independently verifiable and correct regardless of whether the yield
+ *   bug turns out to apply — but don't treat "BKG's yield looks fine" as
+ *   evidence it's actually correct.
+ */
+export const REPORTING_CURRENCY_OVERRIDES: Record<string, { currency: string; confidence: "confirmed" | "likely"; note: string }> = {
+  UMME: {
+    currency: "UGX",
+    confidence: "confirmed",
+    note: "Umeme Ltd, Uganda-domiciled, primary listing on the Uganda Securities Exchange. Confirmed via FY2025 Financial Statement and AGM/Post-AGM notices.",
+  },
+  BKG: {
+    currency: "RWF",
+    confidence: "likely",
+    note: "BK Group Plc (Bank of Kigali), Rwanda-domiciled, primary listing on the Rwanda Stock Exchange since 2011, NSE cross-listing since 2018. Reporting currency confirmed via public company records; whether it shares UMME's specific yield-calculation bug has NOT been independently verified against a BK Group annual report.",
+  },
+};
+
+export function resolveReportingCurrency(ticker: string): string {
+  return REPORTING_CURRENCY_OVERRIDES[ticker]?.currency ?? "KES";
+}
