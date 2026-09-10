@@ -32,14 +32,25 @@ router.get("/watchlist", async (req, res) => {
         // confirmed annual-report DPS outrank TradingView's yield/payout
         // reconciliation without fighting the capture cron for control of
         // the same column.
-        fundamentals: { orderBy: { periodEnd: "desc" }, take: 1 },
+        // Fetches every period, not just the latest one — take:1 with
+        // orderBy periodEnd desc was the exact bug BKG exposed: its most
+        // recent period (H1 2026) has no dividend data, while an earlier
+        // one (FY2025) does, so blindly taking "latest" silently discarded
+        // real, sourced dividend data in favor of a period that has none.
+        // Selection happens in application code below.
+        fundamentals: { orderBy: { periodEnd: "desc" } },
       },
     });
 
     let data = securities
       .map(s => {
         const latest = s.dailyPrices[0];
-        const confirmed = s.fundamentals[0];
+        // Prefer the most recent period that actually HAS a dividend figure
+        // (list is already periodEnd-desc, so .find() returns the newest
+        // qualifying one) — fall back to the latest period overall only
+        // when no period has dividend data at all, preserving today's
+        // behavior for tickers with genuinely no confirmed dividend yet.
+        const confirmed = s.fundamentals.find(f => f.dpsDeclared != null) ?? s.fundamentals[0] ?? null;
         const hasConfirmedDps = confirmed?.dpsDeclared != null;
 
         // Confirmed (audited, from an annual/interim report) always wins
@@ -359,7 +370,15 @@ router.get("/equities", async (req, res) => {
       where: { ticker },
       include: {
         dailyPrices: { where: { isStale: false }, orderBy: { tradeDate: "desc" }, take: 1 },
-        fundamentals: { orderBy: { periodEnd: "desc" }, take: 1 },
+        // No take:1 — see the two-variable split below. This route surfaces
+        // BOTH a general "fundamentals" display block (wants the truly
+        // latest period, richest data) AND a dividend figure (wants the
+        // latest period that actually HAS one) — those are genuinely
+        // different questions, and BKG is the ticker that proves it: its
+        // latest period (H1 2026) has rich revenue/PAT/EPS but no dividend;
+        // an earlier period (FY2025) has the dividend but far less detail.
+        // One variable can't correctly answer both.
+        fundamentals: { orderBy: { periodEnd: "desc" } },
         corporateActions: { orderBy: { exDate: "desc" } },
       },
     });
@@ -367,8 +386,13 @@ router.get("/equities", async (req, res) => {
     if (!security) return res.status(404).json({ error: `${ticker} not found` });
 
     const latest = security.dailyPrices[0];
-    const confirmed = security.fundamentals[0];
-    const hasConfirmedDps = confirmed?.dpsDeclared != null;
+    // General display block — unchanged semantics, truly the latest period.
+    const latestFundamental = security.fundamentals[0] ?? null;
+    // Dividend precedence — prefers the latest period that actually HAS a
+    // dividend figure over the latest period overall. Falls back to
+    // latestFundamental only when no period has dividend data at all.
+    const dpsFundamental = security.fundamentals.find(f => f.dpsDeclared != null) ?? null;
+    const hasConfirmedDps = dpsFundamental != null;
     const dpsSource = hasConfirmedDps ? "annual_report" : latest?.dpsDerivedKes != null ? "derived" : null;
     const dpsCurrency = hasConfirmedDps ? security.reportingCurrency : security.exchangeCurrency;
     const canComputeConfirmedYield =
@@ -437,19 +461,27 @@ router.get("/equities", async (req, res) => {
         peRatio: latest?.peRatio ?? null,
       },
       dividend: {
-        dps: hasConfirmedDps ? confirmed!.dpsDeclared : latest?.dpsDerivedKes ?? null,
+        dps: hasConfirmedDps ? dpsFundamental!.dpsDeclared : latest?.dpsDerivedKes ?? null,
         dpsCurrency,
         confidence: hasConfirmedDps ? "confirmed" : latest?.dpsConfidence ?? null,
-        sourceTier: hasConfirmedDps ? confirmed!.sourceTier : null,
+        sourceTier: hasConfirmedDps ? dpsFundamental!.sourceTier : null,
         source: dpsSource,
         derivedYieldCurrencyUnverified,
         yieldPct: canComputeConfirmedYield
-          ? Number(confirmed!.dpsDeclared) / Number(latest!.close) * 100
+          ? Number(dpsFundamental!.dpsDeclared) / Number(latest!.close) * 100
           : hasConfirmedDps
             ? null // confirmed DPS in a currency that doesn't match the KES price — no fabricated yield
             : latest?.dividendYieldPct ?? null,
       },
-      fundamentals: confirmed ?? null, // includes `extra` — the full report detail, in reportingCurrency
+      // The general display block deliberately uses latestFundamental (truly
+      // the newest period, richest data), NOT dpsFundamental — this is what
+      // stops the dividend-precedence fix above from silently downgrading
+      // what a consumer sees when they ask "what are this company's latest
+      // fundamentals." BKG's case: latestFundamental is H1 2026 (real
+      // revenue/PAT/EPS, no dividend); dpsFundamental is FY2025 (has the
+      // dividend, far less other detail). Both are correct for their own
+      // question; using the wrong one for either would be a regression.
+      fundamentals: latestFundamental, // includes `extra` — the full report detail, in reportingCurrency
       nextDividend: toDividendSummary(next) ?? null,
       lastDividend: toDividendSummary(last) ?? null,
       dividendHistory: security.corporateActions, // full history, all action types, amountPerShare in reportingCurrency
