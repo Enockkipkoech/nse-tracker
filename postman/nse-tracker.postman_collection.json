@@ -1,0 +1,1719 @@
+{
+  "info": {
+    "_postman_id": "b2f1a6d4-7e3c-4a1f-9c2e-nse-tracker-001",
+    "name": "NSE Tracker API",
+    "description": "All 10 endpoints (health + 9 /v1/* routes). Bearer auth is set at collection level via {{readToken}} — every request inherits it except /health and the two explicit \"No Auth\"/\"Bad Token\" negative tests, which override it.\n\nKNOWN BUG, deliberately left demonstrated rather than worked around: the \"Equity Detail - BKG (known bug)\" request asserts CORRECT behavior (dividend.confidence should be \"confirmed\", since BKG has a real, sourced FY2025 dividend). It will currently FAIL — both /watchlist and /equities pick the Fundamental row with the latest periodEnd, and BKG's latest period (H1 2026) has no dividend while an earlier period (FY2025) does. Run that request to see it demonstrated, not just described.\n\nCapture requests (POST /v1/capture/*) hit live TradingView — run those deliberately, not as part of an unattended full-collection run on a tight loop.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{readToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "readToken",
+      "value": "change-me",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET Health Check",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ok: true', () => pm.expect(pm.response.json().ok).to.eql(true));",
+                  "pm.test('no auth required', () => pm.expect(pm.response.code).to.not.eql(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Watchlist",
+      "item": [
+        {
+          "name": "GET Watchlist - all tickers",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlist"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('count matches data.length', () => pm.expect(json.count).to.eql(json.data.length));",
+                  "pm.test('data is an array', () => pm.expect(json.data).to.be.an('array'));",
+                  "pm.test('expect close to the full 60-ticker universe', () => pm.expect(json.count).to.be.above(50));",
+                  "pm.test('every row has ticker and exchangeCurrency', () => {",
+                  "  json.data.forEach(r => {",
+                  "    pm.expect(r).to.have.property('ticker');",
+                  "    pm.expect(r).to.have.property('exchangeCurrency');",
+                  "  });",
+                  "});",
+                  "pm.test('sorted descending by marketCapKes', () => {",
+                  "  for (let i = 1; i < json.data.length; i++) {",
+                  "    const prev = Number(json.data[i-1].marketCapKes ?? 0);",
+                  "    const curr = Number(json.data[i].marketCapKes ?? 0);",
+                  "    pm.expect(prev).to.be.at.least(curr);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Watchlist - minConfidence=confirmed",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlist?minConfidence=confirmed",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlist"
+              ],
+              "query": [
+                {
+                  "key": "minConfidence",
+                  "value": "confirmed"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('every row is actually confirmed', () => {",
+                  "  json.data.forEach(r => pm.expect(r.dpsConfidence).to.eql('confirmed'));",
+                  "});",
+                  "pm.test('floor filter is stricter than or equal to unfiltered count', () => {",
+                  "  pm.expect(json.count).to.be.at.most(60);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Watchlist - minConfidence=high (includes confirmed+high)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlist?minConfidence=high",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlist"
+              ],
+              "query": [
+                {
+                  "key": "minConfidence",
+                  "value": "high"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('no low/none confidence rows leak through', () => {",
+                  "  json.data.forEach(r => pm.expect(['confirmed', 'high']).to.include(r.dpsConfidence));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Equity Detail",
+      "item": [
+        {
+          "name": "GET Equity Detail - SCOM (same-currency, confirmed)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/equities?ticker=SCOM",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "equities"
+              ],
+              "query": [
+                {
+                  "key": "ticker",
+                  "value": "SCOM"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('exchangeCurrency and reportingCurrency both KES', () => {",
+                  "  pm.expect(json.exchangeCurrency).to.eql('KES');",
+                  "  pm.expect(json.reportingCurrency).to.eql('KES');",
+                  "});",
+                  "pm.test('dividend is confirmed with real yield (same-currency case)', () => {",
+                  "  pm.expect(json.dividend.confidence).to.eql('confirmed');",
+                  "  pm.expect(json.dividend.sourceTier).to.eql('primary');",
+                  "  pm.expect(json.dividend.yieldPct).to.not.be.null;",
+                  "});",
+                  "pm.test('lastDividend is populated', () => pm.expect(json.lastDividend).to.not.be.null);",
+                  "pm.test('dividendHistory is an array', () => pm.expect(json.dividendHistory).to.be.an('array'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Equity Detail - UMME (cross-currency, yield suppressed)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/equities?ticker=UMME",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "equities"
+              ],
+              "query": [
+                {
+                  "key": "ticker",
+                  "value": "UMME"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('reportingCurrency is UGX, exchangeCurrency is KES', () => {",
+                  "  pm.expect(json.reportingCurrency).to.eql('UGX');",
+                  "  pm.expect(json.exchangeCurrency).to.eql('KES');",
+                  "});",
+                  "pm.test('dividend confirmed but yieldPct is null (currency mismatch, not fabricated)', () => {",
+                  "  pm.expect(json.dividend.confidence).to.eql('confirmed');",
+                  "  pm.expect(json.dividend.dpsCurrency).to.eql('UGX');",
+                  "  pm.expect(json.dividend.yieldPct).to.be.null;",
+                  "});",
+                  "pm.test('dps is the real 222 figure, not the old ~1.99 derived one', () => {",
+                  "  pm.expect(Number(json.dividend.dps)).to.eql(222);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Equity Detail - BKG (known bug: wrong-period Fundamental selected)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/equities?ticker=BKG",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "equities"
+              ],
+              "query": [
+                {
+                  "key": "ticker",
+                  "value": "BKG"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// THIS TEST IS EXPECTED TO FAIL against the current code.",
+                  "// /equities picks the Fundamental row with the LATEST periodEnd",
+                  "// (H1 2026, dpsDeclared=null) instead of the one that actually has",
+                  "// dividend data (FY2025, dpsDeclared=53.04, periodEnd is earlier).",
+                  "// A failing run here is the bug being demonstrated, not a broken test.",
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('BUG CHECK: dividend should be confirmed (real FY2025 data exists)', () => {",
+                  "  pm.expect(json.dividend.confidence).to.eql('confirmed');",
+                  "});",
+                  "pm.test('BUG CHECK: dps should be 53.04, not a TradingView-derived KES figure', () => {",
+                  "  pm.expect(Number(json.dividend.dps)).to.eql(53.04);",
+                  "});",
+                  "pm.test('reportingCurrency is RWF regardless of the bug above', () => {",
+                  "  pm.expect(json.reportingCurrency).to.eql('RWF');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Equity Detail - missing ticker param (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/equities",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "equities"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));",
+                  "pm.test('error message present', () => pm.expect(pm.response.json().error).to.eql('ticker required'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Equity Detail - unknown ticker (404)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/equities?ticker=NOTATICKER",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "equities"
+              ],
+              "query": [
+                {
+                  "key": "ticker",
+                  "value": "NOTATICKER"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Price History",
+      "item": [
+        {
+          "name": "GET History - SCOM",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/history?ticker=SCOM&limit=10",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "ticker",
+                  "value": "SCOM"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('count matches data.length and respects limit', () => {",
+                  "  pm.expect(json.count).to.eql(json.data.length);",
+                  "  pm.expect(json.data.length).to.be.at.most(10);",
+                  "});",
+                  "pm.test('volume is a string (BigInt serialized, not a bare number)', () => {",
+                  "  if (json.data.length && json.data[0].volume !== null) {",
+                  "    pm.expect(typeof json.data[0].volume).to.eql('string');",
+                  "  }",
+                  "});",
+                  "pm.test('Tier 1-3 fields are present on the row shape', () => {",
+                  "  if (json.data.length) {",
+                  "    const row = json.data[0];",
+                  "    ['avgVolume30d', 'perf1y', 'delaySeconds', 'highAll', 'dividendStreakYears']",
+                  "      .forEach(f => pm.expect(row).to.have.property(f));",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET History - missing ticker param (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/history",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "history"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Fundamentals",
+      "item": [
+        {
+          "name": "GET Fundamentals - SCOM (latest period)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/fundamentals?ticker=SCOM",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "fundamentals"
+              ],
+              "query": [
+                {
+                  "key": "ticker",
+                  "value": "SCOM"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('reportingCurrency at envelope level, not per-row', () => {",
+                  "  pm.expect(json.reportingCurrency).to.eql('KES');",
+                  "});",
+                  "pm.test('default returns exactly one period', () => pm.expect(json.count).to.eql(1));",
+                  "pm.test('sourceTier is primary', () => pm.expect(json.data[0].sourceTier).to.eql('primary'));",
+                  "pm.test('extra blob present with report detail', () => {",
+                  "  pm.expect(json.data[0].extra).to.have.property('auditor');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Fundamentals - BKG all=true (both periods, mixed sourceTier)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/fundamentals?ticker=BKG&all=true",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "fundamentals"
+              ],
+              "query": [
+                {
+                  "key": "ticker",
+                  "value": "BKG"
+                },
+                {
+                  "key": "all",
+                  "value": "true"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('all=true returns both BKG periods', () => pm.expect(json.count).to.eql(2));",
+                  "pm.test('sourceTier differs across the two rows (primary H1, mixed FY2025)', () => {",
+                  "  const tiers = json.data.map(d => d.sourceTier).sort();",
+                  "  pm.expect(tiers).to.eql(['mixed', 'primary']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Fundamentals - missing ticker param (400)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/fundamentals",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "fundamentals"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 400', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Fundamentals - ticker with no data on file (404)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/fundamentals?ticker=KCB",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "fundamentals"
+              ],
+              "query": [
+                {
+                  "key": "ticker",
+                  "value": "KCB"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// KCB is currently a placeholder-only fixture entry (all-null figures),",
+                  "// which seed-fundamentals.ts correctly skips as skipped_placeholder — so",
+                  "// nothing is in the DB for it yet and this should 404. If this fails,",
+                  "// someone filled in KCB's real figures since this test was written,",
+                  "// which is good news — swap the ticker used here for a still-empty one.",
+                  "pm.test('status 404', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Dividend Calendar",
+      "item": [
+        {
+          "name": "GET Dividends - upcoming (default window)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/dividends",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "dividends"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('window defaults to upcoming', () => pm.expect(json.window).to.eql('upcoming'));",
+                  "pm.test('every row has amountCurrency (not assumed KES)', () => {",
+                  "  json.data.forEach(r => pm.expect(r).to.have.property('amountCurrency'));",
+                  "});",
+                  "pm.test('sorted ascending by exDate where present', () => {",
+                  "  const dated = json.data.filter(r => r.exDate);",
+                  "  for (let i = 1; i < dated.length; i++) {",
+                  "    pm.expect(new Date(dated[i-1].exDate).getTime()).to.be.at.most(new Date(dated[i].exDate).getTime());",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Dividends - past 12 months",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/dividends?window=past",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "dividends"
+              ],
+              "query": [
+                {
+                  "key": "window",
+                  "value": "past"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('window is past', () => pm.expect(json.window).to.eql('past'));",
+                  "pm.test('yieldBasis is close_at_ex_date or null, never latest_close, for past rows', () => {",
+                  "  json.data.forEach(r => pm.expect(r.yieldBasis).to.not.eql('latest_close'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Dividends - past, filtered to SCOM",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/dividends?window=past&ticker=SCOM",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "dividends"
+              ],
+              "query": [
+                {
+                  "key": "window",
+                  "value": "past"
+                },
+                {
+                  "key": "ticker",
+                  "value": "SCOM"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('every row is SCOM only', () => {",
+                  "  json.data.forEach(r => pm.expect(r.ticker).to.eql('SCOM'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Capture (writes live data — run deliberately)",
+      "item": [
+        {
+          "name": "POST Capture Intraday",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/v1/capture/intraday",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "capture",
+                "intraday"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Hits live TradingView. 502 is a legitimate outcome if the upstream",
+                  "// scanner is briefly unavailable — this asserts SHAPE, not that 200",
+                  "// always happens.",
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.test('persisted <= totalCount', () => pm.expect(json.persisted).to.be.at.most(json.totalCount));",
+                  "  pm.test('skippedUnknown is an array', () => pm.expect(json.skippedUnknown).to.be.an('array'));",
+                  "} else {",
+                  "  pm.test('non-200 is a known upstream-failure code', () => pm.expect(pm.response.code).to.eql(502));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "POST Capture EOD",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/v1/capture/eod",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "capture",
+                "eod"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.test('tradeDate is a real date or null (non-trading day)', () => {",
+                  "    if (json.tradeDate !== null) pm.expect(json.tradeDate).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "  });",
+                  "  pm.test('persisted <= totalCount', () => pm.expect(json.persisted).to.be.at.most(json.totalCount));",
+                  "} else {",
+                  "  pm.test('non-200 is a known upstream-failure code', () => pm.expect(pm.response.code).to.eql(502));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Diagnostics",
+      "item": [
+        {
+          "name": "GET Coverage",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/coverage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "coverage"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('upstreamCount and masterCount are numbers', () => {",
+                  "  pm.expect(json.upstreamCount).to.be.a('number');",
+                  "  pm.expect(json.masterCount).to.be.a('number');",
+                  "});",
+                  "pm.test('both diff arrays present', () => {",
+                  "  pm.expect(json.missingFromUpstream).to.be.an('array');",
+                  "  pm.expect(json.unmappedUpstream).to.be.an('array');",
+                  "});",
+                  "pm.test('60/60 coverage — flag if this regresses', () => {",
+                  "  pm.expect(json.missingFromUpstream.length).to.eql(0);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Quality Log",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/quality",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "quality"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const json = pm.response.json();",
+                  "pm.test('status 200', () => pm.response.to.have.status(200));",
+                  "pm.test('data is an array, capped at 200', () => {",
+                  "  pm.expect(json.data).to.be.an('array');",
+                  "  pm.expect(json.data.length).to.be.at.most(200);",
+                  "});",
+                  "pm.test('entries have severity/code/detail', () => {",
+                  "  if (json.data.length) {",
+                  "    pm.expect(json.data[0]).to.have.property('severity');",
+                  "    pm.expect(json.data[0]).to.have.property('code');",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Auth Negative Tests",
+      "item": [
+        {
+          "name": "GET Watchlist - no Authorization header (401)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlist"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));",
+                  "pm.test('error body present', () => pm.expect(pm.response.json().error).to.eql('unauthorized'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET Watchlist - wrong token (401)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "definitely-wrong-token",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/v1/watchlist",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "v1",
+                "watchlist"
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('status 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin (writes — requires ADMIN_TOKEN, separate from READ_TOKEN)",
+      "description": "All requests in this folder override the collection-level bearer auth to use {{adminToken}} instead of {{readToken}} — set both in your environment. Every business rule here (reportUrl required for real figures, ticker must exist, sourceTier/enum allowlists) is enforced by packages/db/src/admin.ts, shared with the CLI seed scripts — not reimplemented in the HTTP layer.\n\nCreate/Delete pairs are self-cleaning: the create test uses a deliberately fake ticker/period/actionId (SCOM + periodEnd 2099-12-31, or an actionId ending in DELETE-ME) that can't collide with real data, and the delete test immediately after removes it. Safe to run the whole folder repeatedly.",
+      "item": [
+        {
+          "name": "Fundamentals",
+          "item": [
+            {
+              "name": "POST Create Fundamental - valid (self-cleaning test record)",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/fundamentals",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "fundamentals"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"SCOM\",\n  \"periodEnd\": \"2099-12-31\",\n  \"periodType\": \"FY\",\n  \"isAudited\": true,\n  \"epsBasic\": 1.0,\n  \"reportUrl\": \"https://example.com/test-report.pdf\",\n  \"sourceTier\": \"primary\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// periodEnd=2099-12-31 is a deliberately fake, far-future period so this",
+                      "// never collides with real SCOM data. The DELETE test below removes it —",
+                      "// this pair is self-cleaning, safe to run repeatedly.",
+                      "const json = pm.response.json();",
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('ticker echoed back', () => pm.expect(json.ticker).to.eql('SCOM'));",
+                      "pm.test('sourceTier saved as submitted', () => pm.expect(json.sourceTier).to.eql('primary'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST Create Fundamental - real figures, missing reportUrl (400)",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/fundamentals",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "fundamentals"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"SCOM\",\n  \"periodEnd\": \"2099-12-31\",\n  \"epsBasic\": 1.0\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Same validation seed-fundamentals.ts enforces — shared, not duplicated.",
+                      "pm.test('status 400', () => pm.response.to.have.status(400));",
+                      "pm.test('error names the missing field', () => {",
+                      "  pm.expect(pm.response.json().error).to.include('reportUrl');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST Create Fundamental - unknown ticker (404)",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/fundamentals",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "fundamentals"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"ZZZNOTATICKER\",\n  \"periodEnd\": \"2025-12-31\",\n  \"epsBasic\": 1.0,\n  \"reportUrl\": \"https://example.com/x.pdf\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 404', () => pm.response.to.have.status(404));",
+                      "pm.test('error mentions security_master', () => {",
+                      "  pm.expect(pm.response.json().error).to.include('security_master');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST Create Fundamental - invalid sourceTier (400)",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/fundamentals",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "fundamentals"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"SCOM\",\n  \"periodEnd\": \"2099-12-31\",\n  \"sourceTier\": \"definitely_not_a_real_tier\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// No real figures in this payload, so the reportUrl check is skipped and",
+                      "// this isolates the sourceTier allowlist check specifically.",
+                      "pm.test('status 400', () => pm.response.to.have.status(400));",
+                      "pm.test('error lists the valid tiers', () => {",
+                      "  pm.expect(pm.response.json().error).to.include('primary');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST Create Fundamental - invalid periodEnd date (400)",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/fundamentals",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "fundamentals"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"SCOM\",\n  \"periodEnd\": \"not-a-date\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 400', () => pm.response.to.have.status(400));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE Fundamental - removes the test record created above",
+              "request": {
+                "method": "DELETE",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/fundamentals/SCOM/2099-12-31",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "fundamentals",
+                    "SCOM",
+                    "2099-12-31"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 204', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE Fundamental - already gone (404)",
+              "request": {
+                "method": "DELETE",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/fundamentals/SCOM/2099-12-31",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "fundamentals",
+                    "SCOM",
+                    "2099-12-31"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Run this AFTER the delete above (same record, same run) to confirm a",
+                      "// second delete of an already-removed row fails cleanly rather than",
+                      "// silently succeeding twice.",
+                      "pm.test('status 404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Corporate Actions",
+          "item": [
+            {
+              "name": "POST Create Corporate Action - valid (self-cleaning test record)",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/corporate-actions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "corporate-actions"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"actionId\": \"SCOM-TEST-ACTION-DELETE-ME\",\n  \"ticker\": \"SCOM\",\n  \"actionType\": \"CASH_DIVIDEND\",\n  \"dividendType\": \"INTERIM\",\n  \"fiscalYear\": 2099,\n  \"amountPerShare\": 1.0,\n  \"sourceUrl\": \"https://example.com/test-announcement.pdf\",\n  \"status\": \"ANNOUNCED\",\n  \"sourceTier\": \"primary\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const json = pm.response.json();",
+                      "pm.test('status 200', () => pm.response.to.have.status(200));",
+                      "pm.test('actionId echoed back', () => pm.expect(json.actionId).to.eql('SCOM-TEST-ACTION-DELETE-ME'));",
+                      "pm.test('status saved as submitted', () => pm.expect(json.status).to.eql('ANNOUNCED'));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST Create Corporate Action - amount without sourceUrl (400)",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/corporate-actions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "corporate-actions"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"actionId\": \"SCOM-TEST-SHOULD-NOT-BE-CREATED\",\n  \"ticker\": \"SCOM\",\n  \"actionType\": \"CASH_DIVIDEND\",\n  \"amountPerShare\": 1.0\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Same validation seed-corporate-actions.ts enforces — shared, not duplicated.",
+                      "pm.test('status 400', () => pm.response.to.have.status(400));",
+                      "pm.test('error names the missing field', () => {",
+                      "  pm.expect(pm.response.json().error).to.include('sourceUrl');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST Create Corporate Action - invalid actionType enum (400)",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/corporate-actions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "corporate-actions"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"actionId\": \"SCOM-TEST-BAD-ENUM\",\n  \"ticker\": \"SCOM\",\n  \"actionType\": \"NOT_A_REAL_ACTION_TYPE\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// Validated against Prisma's own generated enum object at runtime, not a",
+                      "// hand-duplicated list — see packages/db/src/admin.ts.",
+                      "pm.test('status 400', () => pm.response.to.have.status(400));",
+                      "pm.test('error lists valid actionTypes', () => {",
+                      "  pm.expect(pm.response.json().error).to.include('CASH_DIVIDEND');",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST Create Corporate Action - unknown ticker (404)",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/corporate-actions",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "corporate-actions"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"actionId\": \"ZZZ-TEST-UNKNOWN-TICKER\",\n  \"ticker\": \"ZZZNOTATICKER\",\n  \"actionType\": \"CASH_DIVIDEND\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE Corporate Action - removes the test record created above",
+              "request": {
+                "method": "DELETE",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/corporate-actions/SCOM-TEST-ACTION-DELETE-ME",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "corporate-actions",
+                    "SCOM-TEST-ACTION-DELETE-ME"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 204', () => pm.response.to.have.status(204));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DELETE Corporate Action - already gone (404)",
+              "request": {
+                "method": "DELETE",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{adminToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/corporate-actions/SCOM-TEST-ACTION-DELETE-ME",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "corporate-actions",
+                    "SCOM-TEST-ACTION-DELETE-ME"
+                  ]
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 404', () => pm.response.to.have.status(404));"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "Auth Boundary (admin vs read token)",
+          "item": [
+            {
+              "name": "POST Admin - no Authorization header (401)",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "noauth"
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/fundamentals",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "fundamentals"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"SCOM\",\n  \"periodEnd\": \"2099-12-31\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "pm.test('status 401', () => pm.response.to.have.status(401));"
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "name": "POST Admin - READ_TOKEN rejected (401) — the actual security boundary",
+              "request": {
+                "method": "POST",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{readToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "url": {
+                  "raw": "{{baseUrl}}/admin/fundamentals",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "admin",
+                    "fundamentals"
+                  ]
+                },
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"ticker\": \"SCOM\",\n  \"periodEnd\": \"2099-12-31\"\n}"
+                }
+              },
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "// THIS is the test that matters most in this folder: confirms read access",
+                      "// does NOT imply write access. If this ever starts passing with 200, the",
+                      "// two auth boundaries (READ_TOKEN vs ADMIN_TOKEN) have been accidentally",
+                      "// merged somewhere — see app.ts's separate /admin middleware.",
+                      "pm.test('status 401 — readToken must not work on /admin', () => {",
+                      "  pm.response.to.have.status(401);",
+                      "});"
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
