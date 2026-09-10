@@ -24,4 +24,4 @@ packages/db/fixtures/board.json
 
 # logs / OS cruft
 *.log
-.DS_Store
+.DS_Storepostman/*.postman_environment.json
