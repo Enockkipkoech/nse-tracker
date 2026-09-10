@@ -38,13 +38,14 @@ interface ActionRow {
   dividendType?: string | null;
   fiscalYear?: number | null;
   announcementDate?: string | null;
-  amountPerShareKes?: number | null;
+  amountPerShare?: number | null;
   ratio?: string | null;
   booksClosureDate?: string | null;
   exDate?: string | null;
   paymentDate?: string | null;
   status: string;
   sourceUrl: string | null;
+  sourceTier?: string | null;
   _note?: string;
 }
 
@@ -61,7 +62,7 @@ async function main() {
     // fact. A row with no amount at all (a pure placeholder) isn't checked
     // here since none currently exist in the fixture — add that guard if
     // this fixture grows placeholder rows the way fundamentals.json did.
-    if (row.amountPerShareKes != null && !row.sourceUrl) {
+    if (row.amountPerShare != null && !row.sourceUrl) {
       console.error(`SKIP ${row.actionId}: has an amount but no sourceUrl — refusing to seed unsourced data`);
       skippedInvalid++;
       continue;
@@ -82,26 +83,28 @@ async function main() {
         dividendType: (row.dividendType as never) ?? undefined,
         fiscalYear: row.fiscalYear ?? undefined,
         announcementDate: row.announcementDate ? new Date(row.announcementDate) : undefined,
-        amountPerShareKes: row.amountPerShareKes ?? undefined,
+        amountPerShare: row.amountPerShare ?? undefined,
         ratio: row.ratio ?? undefined,
         booksClosureDate: row.booksClosureDate ? new Date(row.booksClosureDate) : undefined,
         exDate: row.exDate ? new Date(row.exDate) : undefined,
         paymentDate: row.paymentDate ? new Date(row.paymentDate) : undefined,
         status: row.status as never,
         sourceUrl: row.sourceUrl ?? undefined,
+        sourceTier: row.sourceTier ?? undefined,
         verifiedAt: new Date(),
       },
       update: {
         dividendType: (row.dividendType as never) ?? undefined,
         fiscalYear: row.fiscalYear ?? undefined,
         announcementDate: row.announcementDate ? new Date(row.announcementDate) : undefined,
-        amountPerShareKes: row.amountPerShareKes ?? undefined,
+        amountPerShare: row.amountPerShare ?? undefined,
         ratio: row.ratio ?? undefined,
         booksClosureDate: row.booksClosureDate ? new Date(row.booksClosureDate) : undefined,
         exDate: row.exDate ? new Date(row.exDate) : undefined,
         paymentDate: row.paymentDate ? new Date(row.paymentDate) : undefined,
         status: row.status as never,
         sourceUrl: row.sourceUrl ?? undefined,
+        sourceTier: row.sourceTier ?? undefined,
         verifiedAt: new Date(),
       },
     });
@@ -117,21 +120,21 @@ async function main() {
   // meant to agree, unlike the derived-vs-confirmed comparison elsewhere.
   const byTickerYear = new Map<string, number>();
   for (const row of rows) {
-    if (row.actionType !== "CASH_DIVIDEND" || row.amountPerShareKes == null || !row.fiscalYear) continue;
+    if (row.actionType !== "CASH_DIVIDEND" || row.amountPerShare == null || !row.fiscalYear) continue;
     const key = `${row.ticker}-${row.fiscalYear}`;
-    byTickerYear.set(key, (byTickerYear.get(key) ?? 0) + row.amountPerShareKes);
+    byTickerYear.set(key, (byTickerYear.get(key) ?? 0) + row.amountPerShare);
   }
   for (const [key, total] of byTickerYear) {
     const [ticker, fyStr] = key.split("-");
     const periodEnd = await prisma.fundamental.findFirst({
       where: { ticker, periodEnd: { gte: new Date(`${fyStr}-01-01`), lt: new Date(`${Number(fyStr) + 1}-01-01`) } },
-      select: { dpsDeclaredKes: true },
+      select: { dpsDeclared: true },
     });
-    if (periodEnd?.dpsDeclaredKes != null && Math.abs(Number(periodEnd.dpsDeclaredKes) - total) > 0.01) {
+    if (periodEnd?.dpsDeclared != null && Math.abs(Number(periodEnd.dpsDeclared) - total) > 0.01) {
       await prisma.qualityLog.create({
         data: {
           severity: "WARN", code: "CORPORATE_ACTION_SUM_MISMATCH", ticker,
-          detail: `corporate_actions rows for FY${fyStr} sum to ${total}, but fundamentals.dpsDeclaredKes says ${periodEnd.dpsDeclaredKes} — check both fixtures for a typo.`,
+          detail: `corporate_actions rows for FY${fyStr} sum to ${total}, but fundamentals.dpsDeclared says ${periodEnd.dpsDeclared} — check both fixtures for a typo.`,
         },
       });
     }

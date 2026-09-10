@@ -25,7 +25,7 @@ config({ path: path.resolve(__dirname, "../../../.env") });
 
 import { PrismaClient, InstrumentType } from "@prisma/client";
 import { readFileSync } from "node:fs";
-import { normalize, resolveSector, CONFIRMED_ISIN, TICKER_RENAMES, type TvRow } from "@nse/lib";
+import { normalize, resolveSector, resolveReportingCurrency, CONFIRMED_ISIN, TICKER_RENAMES, type TvRow } from "@nse/lib";
 
 const prisma = new PrismaClient();
 const BOARD_PATH = process.env.BOARD_FIXTURE ?? "fixtures/board.json";
@@ -61,6 +61,11 @@ async function main() {
 
     const isin = CONFIRMED_ISIN[ticker] ?? undefined;
     const inMarketCap = row.instrument_type === "ORDINARY";
+    // row.currency is TradingView's own live-fetched field — what currency
+    // the NSE price itself is quoted in. Never hand-set; if a genuinely
+    // non-KES-quoted listing ever appears, this reflects it automatically.
+    const exchangeCurrency = row.currency ?? "KES";
+    const reportingCurrency = resolveReportingCurrency(ticker);
 
     await prisma.securityMaster.upsert({
       where: { ticker },
@@ -78,6 +83,8 @@ async function main() {
         sharesIssued: row.shares_outstanding != null ? BigInt(Math.floor(row.shares_outstanding)) : undefined,
         freeFloatShares: row.float_shares != null ? BigInt(Math.floor(row.float_shares)) : undefined,
         isin,
+        exchangeCurrency,
+        reportingCurrency,
         inMarketCap,
         coveredByTv: true,
         verifiedAt: new Date(),
@@ -95,6 +102,8 @@ async function main() {
         sharesIssued: row.shares_outstanding != null ? BigInt(Math.floor(row.shares_outstanding)) : undefined,
         freeFloatShares: row.float_shares != null ? BigInt(Math.floor(row.float_shares)) : undefined,
         ...(isin ? { isin } : {}),
+        exchangeCurrency,
+        reportingCurrency,
         inMarketCap,
         coveredByTv: true,
       },
